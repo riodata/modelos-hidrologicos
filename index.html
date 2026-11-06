@@ -1,0 +1,799 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Cinco Saltos — mapa 3D (sin simulación)</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Modelo de elevación 3D (three.js) con las mismas capas del mapa web 2D,
+   ahora drapeadas sobre el relieve real del MDE. Cámara orbitable con mouse/touch. */
+:root{
+  --bg:#f4f1ea; --fg:#262220; --panel:#ffffff; --border:#ddd6ca;
+  --muted:#80766a; --accent:#b6572f; --accent-2:#2f6b63;
+  --map-bg:#15181a; --chip:#eee8db;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1b1917; --fg:#efe9e1; --panel:#252220; --border:#3a3531;
+    --muted:#9a8f82; --accent:#e08654; --accent-2:#5fae9f;
+    --map-bg:#0e1011; --chip:#2f2b27; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1b1917; --fg:#efe9e1; --panel:#252220; --border:#3a3531;
+  --muted:#9a8f82; --accent:#e08654; --accent-2:#5fae9f;
+  --map-bg:#0e1011; --chip:#2f2b27; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:14px/1.45 "IBM Plex Sans", -apple-system, system-ui, sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.mono{font-family:"IBM Plex Mono", ui-monospace, monospace}
+header{
+  flex:0 0 auto; display:flex; align-items:center; gap:.6rem;
+  padding:.6rem max(16px, env(safe-area-inset-left,0px)) .6rem max(16px, env(safe-area-inset-left,0px));
+  padding-top:max(.6rem, env(safe-area-inset-top,0px));
+  border-bottom:1px solid var(--border); background:var(--panel);
+  flex-wrap:wrap;
+}
+header h1{font-size:1rem; margin:0; font-weight:700; letter-spacing:.01em}
+header .sub{color:var(--muted); font-size:.78rem}
+header .spacer{flex:1}
+#logoBadge{
+  flex:0 0 auto; display:flex; align-items:center; background:#fff;
+  border-radius:7px; padding:3px 9px; border:1px solid var(--border);
+}
+#logoBadge img{display:block; height:20px; width:auto}
+@media (max-width:760px){
+  #logoBadge{padding:2px 7px}
+  #logoBadge img{height:16px}
+}
+#menuBtn{
+  display:none; border:1px solid var(--border); background:var(--chip); color:var(--fg);
+  border-radius:8px; padding:.4rem .7rem; font:inherit; cursor:pointer;
+}
+.app{flex:1; display:flex; min-height:0}
+aside{
+  width:280px; flex:0 0 auto; background:var(--panel); border-right:1px solid var(--border);
+  overflow-y:auto; padding:.9rem; display:flex; flex-direction:column; gap:1rem;
+}
+.group{display:flex; flex-direction:column; gap:.45rem}
+.group h2{
+  font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+  margin:0 0 .15rem 0; font-weight:700;
+}
+label.layer{
+  display:flex; align-items:center; gap:.55rem; padding:.4rem .5rem; border-radius:8px;
+  cursor:pointer; user-select:none;
+}
+label.layer:hover{background:var(--chip)}
+label.layer input{accent-color:var(--accent); width:16px; height:16px; flex:0 0 auto}
+label.layer .swatch{
+  width:14px; height:14px; border-radius:3px; flex:0 0 auto; border:1px solid rgba(0,0,0,.25);
+}
+label.layer .name{flex:1; min-width:0}
+label.layer .name b{display:block; font-size:.85rem}
+label.layer .name small{display:block; color:var(--muted); font-size:.72rem}
+.legend-box{
+  border:1px solid var(--border); border-radius:10px; padding:.6rem .7rem; background:var(--bg);
+  font-size:.76rem; color:var(--muted); display:none;
+}
+.legend-box.show{display:block}
+.legend-box .row{display:flex; align-items:center; gap:.4rem; margin:.2rem 0}
+.legend-box .sw{width:12px; height:12px; border-radius:3px; flex:0 0 auto}
+.grad{height:10px; border-radius:5px; margin:.3rem 0 .15rem 0}
+.gradlabels{display:flex; justify-content:space-between; font-family:"IBM Plex Mono",monospace; font-size:.7rem}
+.slider-row{display:flex; flex-direction:column; gap:.3rem; padding:.3rem .5rem}
+.slider-row .lbl{display:flex; justify-content:space-between; font-size:.76rem; color:var(--muted)}
+.slider-row input[type=range]{width:100%; accent-color:var(--accent)}
+.btn-row{display:flex; gap:.4rem; padding:0 .5rem}
+.btn{
+  flex:1; border:1px solid var(--border); background:var(--chip); color:var(--fg); border-radius:8px;
+  padding:.45rem .5rem; font:inherit; font-size:.78rem; cursor:pointer;
+}
+.btn:active{transform:scale(.97)}
+main{flex:1; position:relative; min-width:0; background:var(--map-bg); overflow:hidden}
+#canvasWrap{position:absolute; inset:0}
+#canvasWrap canvas{display:block; touch-action:none}
+#loading{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:#cfc9bf; font-size:.85rem; background:var(--map-bg); z-index:3; flex-direction:column; gap:.5rem;
+}
+#loading .bar{width:160px; height:4px; background:#2a2d2f; border-radius:3px; overflow:hidden}
+#loading .fill{height:100%; width:0%; background:var(--accent); transition:width .15s}
+#compass{
+  position:absolute; left:max(14px, env(safe-area-inset-left,0px)); top:14px; z-index:5;
+  width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+  color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6);
+}
+#compass .dial{position:absolute; inset:0; transition:transform .05s linear}
+#compass .n{position:absolute; top:-1px; left:50%; transform:translateX(-50%); font-size:.68rem; font-weight:700}
+#elevLegend{
+  position:absolute; left:max(14px, env(safe-area-inset-left,0px)); bottom:58px; z-index:5; color:#fff;
+  text-shadow:0 1px 3px rgba(0,0,0,.6); font-family:"IBM Plex Mono",monospace; font-size:.72rem; display:none;
+}
+#elevLegend.show{display:block}
+#elevLegend .grad{width:120px; height:8px; border-radius:4px; margin-top:3px}
+#elevLegend .gl{display:flex; justify-content:space-between; width:120px}
+#scalebar{
+  position:absolute; left:max(14px, env(safe-area-inset-left,0px)); bottom:14px; z-index:5; color:#fff;
+  text-shadow:0 1px 3px rgba(0,0,0,.6); font-family:"IBM Plex Mono",monospace; font-size:.72rem;
+}
+#scalebar .bar{height:4px; background:#fff; border:1px solid #15181a; margin-top:2px; transition:width .1s linear}
+.ctrl-col{position:absolute; right:max(14px, env(safe-area-inset-right,0px)); bottom:14px; display:flex; flex-direction:column; gap:.4rem; z-index:5}
+.ctrl-btn{
+  width:34px; height:34px; border-radius:9px; border:1px solid var(--border); background:var(--panel);
+  color:var(--fg); font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.ctrl-btn:active{transform:scale(.94)}
+#popup{
+  position:absolute; z-index:10; background:var(--panel); border:1px solid var(--border); border-radius:10px;
+  padding:.65rem .75rem; box-shadow:0 8px 24px rgba(0,0,0,.28); font-size:.78rem; max-width:240px; display:none;
+}
+#popup h3{margin:0 0 .35rem 0; font-size:.85rem}
+#popup .pr{display:flex; justify-content:space-between; gap:.6rem; padding:.08rem 0; border-bottom:1px dashed var(--border)}
+#popup .pr:last-child{border-bottom:none}
+#popup .pr b{font-family:"IBM Plex Mono",monospace; font-weight:600}
+#popup .close{position:absolute; top:.35rem; right:.5rem; cursor:pointer; color:var(--muted); font-size:.9rem; background:none; border:none}
+#popup .fm{font-size:.7rem; color:var(--muted); margin-top:.35rem; line-height:1.5}
+.backdrop{position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:19; display:none}
+@media (max-width:760px){
+  #menuBtn{display:inline-flex; align-items:center; gap:.3rem}
+  aside{
+    position:fixed; left:0; top:0; bottom:0; z-index:20; transform:translateX(-105%);
+    transition:transform .22s ease; width:min(82vw,320px);
+    padding-top:max(.9rem, env(safe-area-inset-top,0px));
+    padding-left:max(.9rem, env(safe-area-inset-left,0px));
+  }
+  aside.open{transform:translateX(0)}
+  .backdrop.open{display:block}
+  header h1{font-size:.92rem}
+}
+</style>
+
+<header>
+  <span id="logoBadge"><img src="logo_riodata.png" alt="Río Data"></span>
+  <button id="menuBtn">☰ Capas</button>
+  <h1>Cinco&nbsp;Saltos</h1>
+  <span class="sub">modelo 3D del relieve · subcuencas, geología y CN</span>
+  <div class="spacer"></div>
+  <span class="sub mono" id="hdrStat">25 subcuencas · 154.85 ha</span>
+</header>
+
+<div class="app">
+  <div class="backdrop" id="backdrop"></div>
+  <aside id="sidebar">
+    <div class="group">
+      <h2>Capa de base</h2>
+      <label class="layer"><input type="radio" name="base" value="ortomosaico" checked>
+        <span class="swatch" style="background:#8a8577"></span>
+        <span class="name"><b>Ortomosaico</b><small>foto aérea del relevamiento</small></span></label>
+      <label class="layer"><input type="radio" name="base" value="mde">
+        <span class="swatch" style="background:linear-gradient(90deg,#2b3a8c,#e2e27a,#b0282b)"></span>
+        <span class="name"><b>MDE (relieve)</b><small>cota con sombreado</small></span></label>
+      <label class="layer"><input type="radio" name="base" value="formaciones">
+        <span class="swatch" style="background:#b6793f"></span>
+        <span class="name"><b>Formaciones geológicas</b><small>Allen · Anacleto · Terraza · Aluvión</small></span></label>
+      <label class="layer"><input type="radio" name="base" value="cn">
+        <span class="swatch" style="background:linear-gradient(90deg,#1a9850,#fee08b,#d73027)"></span>
+        <span class="name"><b>Número de Curva (CN)</b><small>escurrimiento, por píxel</small></span></label>
+      <label class="layer"><input type="radio" name="base" value="ninguna">
+        <span class="swatch" style="background:transparent;border-style:dashed"></span>
+        <span class="name"><b>Ninguna</b><small>relieve liso</small></span></label>
+      <div class="legend-box" id="legend-mde">
+        <div class="grad" style="background:linear-gradient(90deg,#2b3a8c,#8fb8d8,#e2e27a,#e8833a,#b0282b)"></div>
+        <div class="gradlabels"><span>321 m</span><span>378 m</span></div>
+      </div>
+      <div class="legend-box" id="legend-formaciones">
+        <div class="row"><span class="sw" style="background:#DFE565"></span>Allen (capuchón arenoso) — B</div>
+        <div class="row"><span class="sw" style="background:#4CA596"></span>Anacleto (fangolita) — C</div>
+        <div class="row"><span class="sw" style="background:#B6793F"></span>Terraza Nivel V (u33) — A</div>
+        <div class="row"><span class="sw" style="background:#F2C230"></span>Aluvión actual (u50) — B</div>
+      </div>
+      <div class="legend-box" id="legend-cn">
+        <div class="grad" style="background:linear-gradient(90deg,#1a9850,#66bd63,#d9ef8b,#fee08b,#fc8d59,#d73027)"></div>
+        <div class="gradlabels"><span>55 (infiltra)</span><span>90 (escurre)</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Capas adicionales</h2>
+      <label class="layer"><input type="checkbox" id="chk-vegetacion">
+        <span class="swatch" style="background:#19a030"></span>
+        <span class="name"><b>Vegetación</b><small>resaltado, % por píxel</small></span></label>
+      <label class="layer"><input type="checkbox" id="chk-subcuencas" checked>
+        <span class="swatch" style="background:linear-gradient(90deg,#1f77b4,#ff7f0e,#2ca02c,#d62728);border:2px solid #262220"></span>
+        <span class="name"><b>Subcuencas</b><small>relleno por color — tocar para ver datos</small></span></label>
+      <label class="layer"><input type="checkbox" id="chk-red" checked>
+        <span class="swatch" style="background:#2f6bd8"></span>
+        <span class="name"><b>Red de drenaje</b><small>cauces, por orden de Strahler</small></span></label>
+    </div>
+
+    <div class="group">
+      <h2>Vista 3D</h2>
+      <div class="slider-row">
+        <span class="lbl"><span>Exageración vertical</span><span class="mono" id="exagVal">3.0×</span></span>
+        <input type="range" id="exag" min="1" max="8" step="0.5" value="3">
+      </div>
+      <label class="layer"><input type="checkbox" id="chk-autorotate">
+        <span class="swatch" style="background:transparent;border:2px dashed var(--muted)"></span>
+        <span class="name"><b>Rotación automática</b><small>gira la cámara sola</small></span></label>
+      <div class="btn-row">
+        <button class="btn" id="resetCam">⤢ Ajustar vista</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Acerca de</h2>
+      <p style="color:var(--muted); font-size:.74rem; margin:0">
+        Terreno generado a partir del MDE (0.5 m). CN global ponderado ≈ 72.4,
+        calculado a partir de las formaciones geológicas que afloran en la zona
+        de vuelo. *El CN es un número adimensional que varía en un rango de 0 a
+        100. Su valor determina qué porcentaje de la lluvia se filtrará en el
+        suelo (infiltración) y qué porcentaje fluirá por la superficie
+        (escorrentía).
+      </p>
+    </div>
+  </aside>
+
+  <main>
+    <div id="canvasWrap"></div>
+    <div id="loading"><div>Cargando modelo 3D…</div><div class="bar"><div class="fill" id="loadFill"></div></div></div>
+    <div id="compass">
+      <svg class="dial" width="36" height="36" viewBox="0 0 36 36">
+        <path d="M18 3 L24 18 L18 14 L12 18 Z" fill="currentColor"/>
+        <path d="M18 33 L24 18 L18 22 L12 18 Z" fill="currentColor" opacity=".45"/>
+      </svg>
+      <span class="n">N</span>
+    </div>
+    <div id="elevLegend">
+      <div>Elevación</div>
+      <div class="grad" style="background:linear-gradient(90deg,#2b3a8c,#8fb8d8,#e2e27a,#e8833a,#b0282b)"></div>
+      <div class="gl"><span id="elMin">321 m</span><span id="elMax">378 m</span></div>
+    </div>
+    <div id="scalebar"><div id="sbLabel">100 m</div><div class="bar" id="sbBar" style="width:80px"></div></div>
+    <div class="ctrl-col">
+      <button class="ctrl-btn" id="zoomIn" title="Acercar">+</button>
+      <button class="ctrl-btn" id="zoomOut" title="Alejar">−</button>
+      <button class="ctrl-btn" id="zoomFit" title="Ajustar">⤢</button>
+    </div>
+    <div id="popup"><button class="close" id="popupClose">✕</button><div id="popupBody"></div></div>
+  </main>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+
+function fmt(v, d){ if (v===null||v===undefined||isNaN(v)) return "–"; return Number(v).toFixed(d); }
+function row(k, v){ return "<div class='pr'><span>"+k+"</span><b>"+v+"</b></div>"; }
+
+var loadFill = document.getElementById("loadFill");
+var loadingEl = document.getElementById("loading");
+function setProgress(p){ loadFill.style.width = Math.round(p*100)+"%"; }
+
+var meta, heightArr, validArr;
+var left,right,bottom,top,zmin,zmax,nx,ny,cx,cy,widthM,depthM;
+var geoSub, geoRed, geoLim, geoForm;
+
+var scene, camera, renderer, controls, terrainGroup;
+var terrainMesh, terrainGeo;
+var materials = {};
+var vegMesh;
+var subFillMesh;
+var subcuencasGroup, redGroup, limiteGroup;
+var subFeatures = []; // {polys:[{ext:[[x,z]],holes:[[[x,z]]]}], props}
+var formFeatures = []; // {polys:[{ext:[[x,z]],holes:[[[x,z]]]}], info}
+var exaggeration = 3;
+var currentBase = "ortomosaico";
+
+var FM_INFO = {
+  1: {name:"Allen", sub:"capuchón arenoso", group:"B"},
+  2: {name:"Anacleto", sub:"fangolita", group:"C"},
+  3: {name:"Terraza Nivel V", sub:"u33", group:"A"},
+  4: {name:"Aluvión actual", sub:"u50", group:"B"}
+};
+
+function b64ToBuffer(b64){
+  var bin = atob(b64);
+  var buf = new Uint8Array(bin.length);
+  for (var i=0;i<bin.length;i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+
+Promise.all([
+  fetch("heightmeta.json").then(r=>r.json()),
+  fetch("subcuencas.geojson").then(r=>r.json()),
+  fetch("red_drenaje.geojson").then(r=>r.json()),
+  fetch("limite.geojson").then(r=>r.json()),
+  fetch("formaciones.geojson").then(r=>r.json())
+]).then(function(res){
+  meta = res[0];
+  heightArr = new Float32Array(b64ToBuffer(meta.height_b64));
+  validArr = new Uint8Array(b64ToBuffer(meta.valid_b64));
+  geoSub = res[1]; geoRed = res[2]; geoLim = res[3]; geoForm = res[4];
+  setProgress(0.35);
+  left=meta.left; right=meta.right; bottom=meta.bottom; top=meta.top;
+  zmin=meta.zmin; zmax=meta.zmax; nx=meta.nx; ny=meta.ny;
+  cx=(left+right)/2; cy=(bottom+top)/2;
+  widthM = right-left; depthM = top-bottom;
+  document.getElementById("elMin").textContent = Math.round(zmin)+" m";
+  document.getElementById("elMax").textContent = Math.round(zmax)+" m";
+
+  initScene();
+  buildTerrain();
+  buildVegetacion();
+  buildSubcuencasFill();
+  buildVectorOverlays();
+  buildFormFeatures();
+  setProgress(0.95);
+  setupUI();
+  fitCamera();
+  animate();
+  setProgress(1);
+  setTimeout(function(){ loadingEl.style.display = "none"; }, 200);
+}).catch(function(err){
+  loadingEl.innerHTML = "<div style='color:#e08654'>Error cargando el modelo 3D:<br>"+err.message+"</div>";
+  console.error(err);
+});
+
+function toLocalXZ(gx, gy){
+  return [gx - cx, -(gy - cy)];
+}
+
+function heightAtGeo(gx, gy){
+  var fcol = (gx-left)/(right-left)*(nx-1);
+  var frow = (top-gy)/(top-bottom)*(ny-1);
+  fcol = Math.max(0, Math.min(nx-1, fcol));
+  frow = Math.max(0, Math.min(ny-1, frow));
+  var c0 = Math.floor(fcol), r0 = Math.floor(frow);
+  var c1 = Math.min(nx-1, c0+1), r1 = Math.min(ny-1, r0+1);
+  var tx = fcol-c0, ty = frow-r0;
+  var h00 = heightArr[r0*nx+c0], h10 = heightArr[r0*nx+c1];
+  var h01 = heightArr[r1*nx+c0], h11 = heightArr[r1*nx+c1];
+  var h0 = h00*(1-tx)+h10*tx, h1 = h01*(1-tx)+h11*tx;
+  return h0*(1-ty)+h1*ty;
+}
+
+function initScene(){
+  var wrap = document.getElementById("canvasWrap");
+  scene = new THREE.Scene();
+  var bgc = getComputedStyle(document.documentElement).getPropertyValue("--map-bg").trim() || "#15181a";
+  scene.background = new THREE.Color(bgc);
+
+  camera = new THREE.PerspectiveCamera(45, wrap.clientWidth/wrap.clientHeight, 1, 20000);
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  wrap.appendChild(renderer.domElement);
+
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 40;
+  controls.maxDistance = 6000;
+  controls.maxPolarAngle = Math.PI*0.49;
+  controls.target.set(0,0,0);
+
+  var hemi = new THREE.HemisphereLight(0xfaf3e2, 0x1a1712, 1.15);
+  scene.add(hemi);
+  var sunAz = 315*Math.PI/180, sunAlt = 45*Math.PI/180;
+  var dir = new THREE.DirectionalLight(0xffffff, 0.7);
+  dir.position.set(-Math.sin(sunAz)*Math.cos(sunAlt), Math.sin(sunAlt), -Math.cos(sunAz)*Math.cos(sunAlt)).multiplyScalar(500);
+  scene.add(dir);
+
+  terrainGroup = new THREE.Group();
+  scene.add(terrainGroup);
+
+  window.addEventListener("resize", onResize);
+}
+
+function onResize(){
+  var wrap = document.getElementById("canvasWrap");
+  camera.aspect = wrap.clientWidth/wrap.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+}
+
+function makeValidTexture(){
+  var data = new Uint8Array(nx*ny*4);
+  for (var i=0;i<nx*ny;i++){
+    var v = validArr[i] > 127 ? 255 : 0;
+    data[i*4]=v; data[i*4+1]=v; data[i*4+2]=v; data[i*4+3]=v;
+  }
+  var tex = new THREE.DataTexture(data, nx, ny, THREE.RGBAFormat);
+  tex.flipY = false;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function loadTerrainTexture(url){
+  var tex = new THREE.TextureLoader().load(url);
+  tex.flipY = false;
+  tex.encoding = THREE.sRGBEncoding;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+
+function buildTerrain(){
+  var positions = new Float32Array(nx*ny*3);
+  var uvs = new Float32Array(nx*ny*2);
+  for (var r=0;r<ny;r++){
+    for (var c=0;c<nx;c++){
+      var i = r*nx+c;
+      var gx = left + (c/(nx-1))*(right-left);
+      var gy = top - (r/(ny-1))*(top-bottom);
+      var loc = toLocalXZ(gx,gy);
+      positions[i*3] = loc[0];
+      positions[i*3+1] = heightArr[i]-zmin;
+      positions[i*3+2] = loc[1];
+      uvs[i*2] = c/(nx-1);
+      uvs[i*2+1] = r/(ny-1);
+    }
+  }
+  var indices = [];
+  for (var r2=0;r2<ny-1;r2++){
+    for (var c2=0;c2<nx-1;c2++){
+      var a = r2*nx+c2, b=a+1, cc=a+nx, d=cc+1;
+      indices.push(a,cc,b, b,cc,d);
+    }
+  }
+  terrainGeo = new THREE.BufferGeometry();
+  terrainGeo.setAttribute("position", new THREE.BufferAttribute(positions,3));
+  terrainGeo.setAttribute("uv", new THREE.BufferAttribute(uvs,2));
+  terrainGeo.setIndex(indices);
+  terrainGeo.computeVertexNormals();
+
+  var validTex = makeValidTexture();
+  var common = {roughness:0.92, metalness:0.0, alphaTest:0.5, side:THREE.DoubleSide, alphaMap:validTex};
+  materials.ortomosaico = new THREE.MeshStandardMaterial(Object.assign({map:loadTerrainTexture("ortomosaico.png")}, common));
+  materials.mde = new THREE.MeshStandardMaterial(Object.assign({map:loadTerrainTexture("mde.png")}, common));
+  materials.cn = new THREE.MeshStandardMaterial(Object.assign({map:loadTerrainTexture("cn.png")}, common));
+  materials.formaciones = new THREE.MeshStandardMaterial(Object.assign({map:loadTerrainTexture("formaciones_tex.png")}, common));
+  materials.ninguna = new THREE.MeshStandardMaterial(Object.assign({color:0xcfc6b5}, common));
+
+  terrainMesh = new THREE.Mesh(terrainGeo, materials.ortomosaico);
+  terrainMesh.visible = true;
+  terrainGroup.add(terrainMesh);
+}
+
+function buildVegetacion(){
+  var tex = loadTerrainTexture("vegetacion.png");
+  var mat = new THREE.MeshStandardMaterial({
+    map:tex, transparent:true, depthWrite:false, roughness:1, metalness:0,
+    side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2
+  });
+  vegMesh = new THREE.Mesh(terrainGeo, mat);
+  vegMesh.position.y = 0.12;
+  vegMesh.visible = false;
+  vegMesh.renderOrder = 2;
+  terrainGroup.add(vegMesh);
+}
+
+function buildSubcuencasFill(){
+  var tex = loadTerrainTexture("subcuencas_tex.png");
+  var mat = new THREE.MeshBasicMaterial({
+    map:tex, transparent:true, depthWrite:false,
+    side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1, polygonOffsetUnits:-1
+  });
+  subFillMesh = new THREE.Mesh(terrainGeo, mat);
+  subFillMesh.position.y = 0.08;
+  subFillMesh.visible = true;
+  subFillMesh.renderOrder = 1;
+  terrainGroup.add(subFillMesh);
+}
+
+function polylineObject(points, color, lineWidthish){
+  var geo = new THREE.BufferGeometry().setFromPoints(points);
+  var mat = new THREE.LineBasicMaterial({color:color, linewidth:lineWidthish||1, depthTest:true});
+  return new THREE.Line(geo, mat);
+}
+function loopObject(points, color){
+  var geo = new THREE.BufferGeometry().setFromPoints(points);
+  var mat = new THREE.LineBasicMaterial({color:color});
+  return new THREE.LineLoop(geo, mat);
+}
+
+// linea "gruesa" real (tubo delgado), porque el ancho de THREE.Line (linewidth)
+// no se respeta en la mayoria de los navegadores/GPU (queda siempre en 1px)
+function tubeLine(points, color, radius, closed){
+  if (closed && points.length > 2 && points[0].distanceToSquared(points[points.length-1]) < 1e-6){
+    points = points.slice(0, points.length-1); // evita el segmento degenerado del cierre duplicado del anillo GeoJSON
+  }
+  if (points.length < 2) return new THREE.Group();
+  var curve = new THREE.CatmullRomCurve3(points, !!closed, "centripetal");
+  var tubularSeg = Math.max(8, Math.min(400, points.length*2));
+  var geo = new THREE.TubeGeometry(curve, tubularSeg, radius, 5, !!closed);
+  var mat = new THREE.MeshBasicMaterial({color:color});
+  var mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 3;
+  return mesh;
+}
+
+function ringToPoints(ring, yOffset){
+  var pts = [];
+  for (var i=0;i<ring.length;i++){
+    var gx=ring[i][0], gy=ring[i][1];
+    var loc = toLocalXZ(gx,gy);
+    var h = heightAtGeo(gx,gy)-zmin+yOffset;
+    pts.push(new THREE.Vector3(loc[0], h, loc[1]));
+  }
+  return pts;
+}
+
+function buildVectorOverlays(){
+  // subcuencas: lineas de contorno + datos para hit-test por click
+  subcuencasGroup = new THREE.Group();
+  var fgColor = 0x1b1917;
+  geoSub.features.forEach(function(f){
+    var polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    var polyRec = [];
+    polys.forEach(function(poly){
+      poly.forEach(function(ring, ringIdx){
+        var pts = ringToPoints(ring, 0.18);
+        subcuencasGroup.add(tubeLine(pts, fgColor, 0.65, true));
+      });
+      var localRings = poly.map(function(ring){
+        return ring.map(function(pt){ return toLocalXZ(pt[0], pt[1]); });
+      });
+      polyRec.push({ext:localRings[0], holes:localRings.slice(1)});
+    });
+    subFeatures.push({polys:polyRec, props:f.properties});
+  });
+  subcuencasGroup.visible = true;
+  terrainGroup.add(subcuencasGroup);
+
+  // red de drenaje
+  redGroup = new THREE.Group();
+  geoRed.features.forEach(function(f){
+    var coords = f.geometry.type === "LineString" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    var order = f.properties && f.properties.strord ? f.properties.strord : 1;
+    var radius = 0.85 + 0.35 * order;
+    coords.forEach(function(line){
+      var pts = ringToPoints(line, 0.15);
+      redGroup.add(tubeLine(pts, 0x2f6bd8, radius, false));
+    });
+  });
+  redGroup.visible = true;
+  terrainGroup.add(redGroup);
+}
+
+function buildFormFeatures(){
+  // solo datos (sin geometria 3D propia: la capa de formaciones se ve como textura),
+  // para poder identificar la formacion al tocar el terreno
+  geoForm.features.forEach(function(f){
+    var polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    var polyRec = [];
+    polys.forEach(function(poly){
+      var localRings = poly.map(function(ring){
+        return ring.map(function(pt){ return toLocalXZ(pt[0], pt[1]); });
+      });
+      polyRec.push({ext:localRings[0], holes:localRings.slice(1)});
+    });
+    formFeatures.push({polys:polyRec, info:FM_INFO[f.properties.fm_id]});
+  });
+}
+
+function pointInRing(x, z, ring){
+  var inside = false;
+  for (var i=0, j=ring.length-1; i<ring.length; j=i++){
+    var xi=ring[i][0], zi=ring[i][1], xj=ring[j][0], zj=ring[j][1];
+    var intersect = ((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/(zj-zi)+xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+function findSubAt(x, z){
+  for (var i=0;i<subFeatures.length;i++){
+    var sf = subFeatures[i];
+    for (var k=0;k<sf.polys.length;k++){
+      var p = sf.polys[k];
+      if (pointInRing(x,z,p.ext)){
+        var inHole = p.holes.some(function(h){ return pointInRing(x,z,h); });
+        if (!inHole) return sf.props;
+      }
+    }
+  }
+  return null;
+}
+function findFormAt(x, z){
+  for (var i=0;i<formFeatures.length;i++){
+    var ff = formFeatures[i];
+    for (var k=0;k<ff.polys.length;k++){
+      var p = ff.polys[k];
+      if (pointInRing(x,z,p.ext)){
+        var inHole = p.holes.some(function(h){ return pointInRing(x,z,h); });
+        if (!inHole) return ff.info;
+      }
+    }
+  }
+  return null;
+}
+
+function setBase(which){
+  currentBase = which;
+  terrainMesh.material = materials[which] || materials.ninguna;
+  document.getElementById("legend-mde").classList.toggle("show", which==="mde");
+  document.getElementById("legend-formaciones").classList.toggle("show", which==="formaciones");
+  document.getElementById("legend-cn").classList.toggle("show", which==="cn");
+  document.getElementById("elevLegend").classList.toggle("show", which==="mde");
+}
+
+function fitCamera(){
+  var dist = Math.max(widthM, depthM);
+  camera.position.set(dist*0.12, dist*0.58, dist*0.82);
+  controls.target.set(0,0,0);
+  controls.update();
+}
+
+function setupUI(){
+  document.querySelectorAll("input[name=base]").forEach(function(r){
+    r.addEventListener("change", function(){ if (this.checked) setBase(this.value); });
+  });
+  setBase("ortomosaico");
+
+  document.getElementById("chk-vegetacion").addEventListener("change", function(){ vegMesh.visible = this.checked; });
+  document.getElementById("chk-subcuencas").addEventListener("change", function(){ subcuencasGroup.visible = this.checked; subFillMesh.visible = this.checked; });
+  document.getElementById("chk-red").addEventListener("change", function(){ redGroup.visible = this.checked; });
+
+  var exagEl = document.getElementById("exag");
+  var exagVal = document.getElementById("exagVal");
+  exagEl.addEventListener("input", function(){
+    exaggeration = parseFloat(this.value);
+    terrainGroup.scale.y = exaggeration;
+    exagVal.textContent = exaggeration.toFixed(1)+"×";
+  });
+  terrainGroup.scale.y = exaggeration;
+
+  document.getElementById("chk-autorotate").addEventListener("change", function(){
+    controls.autoRotate = this.checked;
+    controls.autoRotateSpeed = 1.1;
+  });
+
+  document.getElementById("resetCam").addEventListener("click", fitCamera);
+  document.getElementById("zoomFit").addEventListener("click", fitCamera);
+  document.getElementById("zoomIn").addEventListener("click", function(){ dolly(0.82); });
+  document.getElementById("zoomOut").addEventListener("click", function(){ dolly(1.22); });
+
+  function dolly(f){
+    var p = camera.position, t = controls.target;
+    p.x = t.x+(p.x-t.x)*f; p.y = t.y+(p.y-t.y)*f; p.z = t.z+(p.z-t.z)*f;
+    controls.update();
+  }
+
+  // menu movil
+  var sidebar = document.getElementById("sidebar"), backdrop = document.getElementById("backdrop");
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.add("open"); backdrop.classList.add("open"); });
+  backdrop.addEventListener("click", function(){ sidebar.classList.remove("open"); backdrop.classList.remove("open"); });
+
+  // popup: tap vs drag (igual criterio que el mapa 2D)
+  var dom = renderer.domElement;
+  var down = null, TAP_THRESH = 6;
+  dom.addEventListener("pointerdown", function(ev){ down = {x:ev.clientX, y:ev.clientY}; });
+  dom.addEventListener("pointermove", function(ev){
+    if (!down) return;
+    if (Math.hypot(ev.clientX-down.x, ev.clientY-down.y) > TAP_THRESH) down = null;
+  });
+  dom.addEventListener("pointerup", function(ev){
+    if (!down) return;
+    down = null;
+    handleTap(ev);
+  });
+
+  function handleTap(ev){
+    var rect = dom.getBoundingClientRect();
+    var ndc = new THREE.Vector2(
+      ((ev.clientX-rect.left)/rect.width)*2-1,
+      -((ev.clientY-rect.top)/rect.height)*2+1
+    );
+    var raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, camera);
+    var hits = raycaster.intersectObject(terrainMesh, false);
+    if (!hits.length) return;
+    var pt = hits[0].point; // coordenadas de mundo (terrainGroup sin X/Z offset ni escala en X/Z)
+    if (currentBase === "formaciones"){
+      var info = findFormAt(pt.x, pt.z);
+      if (info) showFormPopup(info, ev);
+    } else {
+      var props = findSubAt(pt.x, pt.z);
+      if (props) showPopup(props, ev);
+    }
+  }
+
+  document.getElementById("popupClose").addEventListener("click", function(){
+    document.getElementById("popup").style.display = "none";
+  });
+}
+
+function showPopup(p, ev){
+  var pop = document.getElementById("popup");
+  document.getElementById("popupBody").innerHTML =
+    "<h3>Subcuenca " + p.id + "</h3>" +
+    row("Área", fmt(p.area_ha,2) + " ha") +
+    row("Pendiente", fmt(p.pend_pct,1) + " %") +
+    row("Tc (Kirpich)", fmt(p.tc_kirpich,1) + " min") +
+    row("CN ponderado", fmt(p.CN,1)) +
+    row("Vegetación", fmt(p.pct_vegeta,1) + " %") +
+    "<div class='fm'>Allen " + fmt(p.pct_Allen,0) + "% · Anacleto " + fmt(p.pct_Anacle,0) +
+    "% · Terraza " + fmt(p.pct_Terraz,0) + "% · Aluvión " + fmt(p.pct_Aluvio,0) + "%</div>";
+  pop.style.display = "block";
+  positionPopupNear(ev);
+}
+
+function showFormPopup(info, ev){
+  var pop = document.getElementById("popup");
+  document.getElementById("popupBody").innerHTML =
+    "<h3>" + info.name + "</h3>" +
+    row("Unidad", info.sub) +
+    row("Grupo hidrológico", info.group);
+  pop.style.display = "block";
+  positionPopupNear(ev);
+}
+
+function positionPopupNear(ev){
+  var main = document.querySelector("main");
+  var rect = main.getBoundingClientRect();
+  var pop = document.getElementById("popup");
+  var x = ev.clientX - rect.left + 14, y = ev.clientY - rect.top + 14;
+  pop.style.left = Math.min(x, rect.width-250) + "px";
+  pop.style.top = Math.min(y, rect.height-150) + "px";
+}
+
+function niceLength(target){
+  if (!isFinite(target) || target <= 0) return 1;
+  var exp = Math.floor(Math.log10(target));
+  var cands = [5,2,1];
+  for (var i=0;i<cands.length;i++){
+    var cand = cands[i]*Math.pow(10,exp);
+    if (cand <= target) return cand;
+  }
+  return Math.pow(10,exp);
+}
+
+var scaleProjA = new THREE.Vector3(), scaleProjB = new THREE.Vector3();
+function updateScalebar3D(){
+  var rect = renderer.domElement.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  // dos puntos separados por una distancia real conocida (en el plano XZ, no afectada
+  // por la escala Y del terrainGroup) cerca del punto que mira la cámara, proyectados
+  // a pantalla: su distancia en píxeles da la escala local real (válida en perspectiva).
+  var sample = 10; // metros
+  scaleProjA.copy(controls.target);
+  scaleProjB.copy(controls.target); scaleProjB.x += sample;
+  scaleProjA.project(camera); scaleProjB.project(camera);
+  var dx = (scaleProjB.x - scaleProjA.x) * 0.5 * rect.width;
+  var dy = (scaleProjB.y - scaleProjA.y) * 0.5 * rect.height;
+  var pxDist = Math.sqrt(dx*dx + dy*dy);
+  if (!isFinite(pxDist) || pxDist < 1e-3) return;
+  var pxPerMeter = pxDist / sample;
+  var targetPx = 90;
+  var len = niceLength(targetPx / pxPerMeter);
+  var px = len * pxPerMeter;
+  if (!isFinite(px) || px <= 0) return;
+  px = Math.max(6, Math.min(px, 260));
+  document.getElementById("sbBar").style.width = px.toFixed(0) + "px";
+  document.getElementById("sbLabel").textContent = (len >= 1000 ? (len/1000)+" km" : len+" m");
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  var az = controls.getAzimuthalAngle();
+  document.querySelector("#compass .dial").style.transform = "rotate("+(az*180/Math.PI)+"deg)";
+  updateScalebar3D();
+  renderer.render(scene, camera);
+}
+
+})();
+</script>
+
+</body></html>
